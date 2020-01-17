@@ -11,6 +11,7 @@ using Abp.Events.Bus.Exceptions;
 using Abp.Extensions;
 using Abp.Logging;
 using Abp.Runtime.Session;
+using Abp.Runtime.Validation;
 using Abp.Web.Models;
 using Abp.WebApi.Configuration;
 using Abp.WebApi.Controllers;
@@ -35,14 +36,14 @@ namespace Abp.WebApi.ExceptionHandling
 
         public IAbpSession AbpSession { get; set; }
 
-        private readonly IAbpWebApiConfiguration _configuration;
+        protected IAbpWebApiConfiguration Configuration { get; }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="AbpApiExceptionFilterAttribute"/> class.
         /// </summary>
         public AbpApiExceptionFilterAttribute(IAbpWebApiConfiguration configuration)
         {
-            _configuration = configuration;
+            Configuration = configuration;
             Logger = NullLogger.Instance;
             EventBus = NullEventBus.Instance;
             AbpSession = NullAbpSession.Instance;
@@ -56,7 +57,7 @@ namespace Abp.WebApi.ExceptionHandling
         {
             var wrapResultAttribute = HttpActionDescriptorHelper
                 .GetWrapResultAttributeOrNull(context.ActionContext.ActionDescriptor) ??
-                _configuration.DefaultWrapResultAttribute;
+                Configuration.DefaultWrapResultAttribute;
 
             if (wrapResultAttribute.LogError)
             {
@@ -65,6 +66,7 @@ namespace Abp.WebApi.ExceptionHandling
 
             if (!wrapResultAttribute.WrapOnError)
             {
+                context.Response.StatusCode = GetStatusCode(context, wrapResultAttribute.WrapOnError);
                 return;
             }
 
@@ -89,9 +91,9 @@ namespace Abp.WebApi.ExceptionHandling
             else
             {
                 context.Response = context.Request.CreateResponse(
-                    GetStatusCode(context),
+                    GetStatusCode(context, wrapResultAttribute.WrapOnError),
                     new AjaxResponse(
-                        SingletonDependency<ErrorInfoBuilder>.Instance.BuildForException(context.Exception),
+                        SingletonDependency<IErrorInfoBuilder>.Instance.BuildForException(context.Exception),
                         context.Exception is Abp.Authorization.AbpAuthorizationException)
                 );
             }
@@ -99,7 +101,7 @@ namespace Abp.WebApi.ExceptionHandling
             EventBus.Trigger(this, new AbpHandledExceptionData(context.Exception));
         }
 
-        private HttpStatusCode GetStatusCode(HttpActionExecutedContext context)
+        protected virtual HttpStatusCode GetStatusCode(HttpActionExecutedContext context, bool wrapOnError)
         {
             if (context.Exception is Abp.Authorization.AbpAuthorizationException)
             {
@@ -108,22 +110,32 @@ namespace Abp.WebApi.ExceptionHandling
                     : HttpStatusCode.Unauthorized;
             }
 
+            if (context.Exception is AbpValidationException)
+            {
+                return HttpStatusCode.BadRequest;
+            }
+
             if (context.Exception is EntityNotFoundException)
             {
                 return HttpStatusCode.NotFound;
             }
 
-            return HttpStatusCode.InternalServerError;
+            if (wrapOnError)
+            {
+                return HttpStatusCode.InternalServerError;
+            }
+
+            return context.Response.StatusCode;
         }
 
-        private bool IsIgnoredUrl(Uri uri)
+        protected virtual bool IsIgnoredUrl(Uri uri)
         {
             if (uri == null || uri.AbsolutePath.IsNullOrEmpty())
             {
                 return false;
             }
 
-            return _configuration.ResultWrappingIgnoreUrls.Any(url => uri.AbsolutePath.StartsWith(url));
+            return Configuration.ResultWrappingIgnoreUrls.Any(url => uri.AbsolutePath.StartsWith(url));
         }
     }
 }

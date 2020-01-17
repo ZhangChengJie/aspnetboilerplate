@@ -1,14 +1,18 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
+using Abp.AspNetCore.Mvc.Results.Caching;
 using Abp.Domain.Uow;
 using Abp.Web.Models;
+using Microsoft.AspNetCore.Routing;
 
 namespace Abp.AspNetCore.Configuration
 {
     public interface IAbpAspNetCoreConfiguration
     {
         WrapResultAttribute DefaultWrapResultAttribute { get; }
+
+        IClientCacheAttribute DefaultClientCacheAttribute { get; set; }
 
         UnitOfWorkAttribute DefaultUnitOfWorkAttribute { get; }
 
@@ -29,6 +33,22 @@ namespace Abp.AspNetCore.Configuration
         /// Default: true.
         /// </summary>
         bool SetNoCacheForAjaxResponses { get; set; }
+
+        /// <summary>
+        /// Default: false.
+        /// </summary>
+        bool UseMvcDateTimeFormatForAppServices { get; set; }
+
+        /// <summary>
+        /// Used to add route config for modules.
+        /// </summary>
+        //[Obsolete("Use EndpointConfiguration instead !")]
+        //List<Action<IRouteBuilder>> RouteConfiguration { get; }
+
+        /// <summary>
+        /// Used to add route config for modules.
+        /// </summary>
+        List<Action<IEndpointRouteBuilder>> EndpointConfiguration { get; }
 
         AbpControllerAssemblySettingBuilder CreateControllersForAppServices(
             Assembly assembly,
